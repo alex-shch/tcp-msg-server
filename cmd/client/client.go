@@ -4,10 +4,10 @@ import (
 	"fmt"
 	"net"
 
-	logPkg "alex-shch/tcp-msg-server/cmd/log"
+	"alex-shch/logger"
 )
 
-var log = logPkg.NewLogger(logPkg.DEBUG)
+var log = logger.NewLogger(logger.DEBUG)
 
 type Client struct {
 	conn net.Conn

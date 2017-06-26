@@ -4,9 +4,9 @@ import (
 	"fmt"
 	"sync"
 
+	"alex-shch/logger"
 	"alex-shch/tcp-msg-server"
 	"alex-shch/tcp-msg-server/cmd/client"
-	"alex-shch/tcp-msg-server/cmd/log"
 )
 
 // implementation server.Handlers
@@ -19,7 +19,7 @@ func (Handlers) OnConnect(inMsgs <-chan []byte, outMsgs chan<- []byte) {
 func main() {
 	wg := &sync.WaitGroup{}
 
-	log := log.NewLogger(log.DEBUG)
+	log := logger.NewLogger(logger.DEBUG)
 
 	server, err := server.NewServer("localhost:4567", Handlers{}, log, wg)
 	if err != nil {
@@ -33,8 +33,6 @@ func main() {
 		panic(err)
 	}
 	client.SendMessage([]byte("123abc"))
-
-	//sendMsg()
 
 	fmt.Scanln()
 
