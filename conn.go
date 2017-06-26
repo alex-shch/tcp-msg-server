@@ -2,6 +2,8 @@ package server
 
 import (
 	"net"
+
+	"alex-shch/logger"
 )
 
 const (
@@ -14,7 +16,7 @@ type _ConnHandler struct {
 	out outStream
 }
 
-func newConnHandler(conn net.Conn, log Logger) *_ConnHandler {
+func newConnHandler(conn net.Conn, log logger.Logger) *_ConnHandler {
 	// TODO придумать способ корректно закрывать соединения
 	hdlr := &_ConnHandler{
 		in: inStream{
@@ -34,4 +36,5 @@ func newConnHandler(conn net.Conn, log Logger) *_ConnHandler {
 
 func (self *_ConnHandler) run() {
 	go self.in.readHeader()
+	go self.out.waitForMsg()
 }

@@ -3,15 +3,38 @@ package server
 import (
 	"net"
 	"strconv"
+
+	"alex-shch/logger"
 )
 
+type InStream interface {
+	Msgs() <-chan []byte
+}
+
+func NewInStream(conn net.Conn, log logger.Logger) InStream {
+	stream := &inStream{
+		log:  log,
+		msgs: make(chan []byte, 8),
+		conn: conn,
+		buf:  make([]byte, 64*1024),
+	}
+
+	go stream.readHeader()
+
+	return stream
+}
+
 type inStream struct {
-	log     Logger
+	log     logger.Logger
 	msgs    chan []byte
 	conn    net.Conn
 	buf     []byte
 	offset  int
 	msgSize int
+}
+
+func (self *inStream) Msgs() <-chan []byte {
+	return self.msgs
 }
 
 func (self *inStream) readHeader() {
@@ -23,7 +46,7 @@ func (self *inStream) readHeader() {
 		self.conn.Close()
 		return
 	}
-	self.log.Debugf("received %d bytes\n", reqLen)
+	self.log.Debugf("received %d bytes", reqLen)
 
 	self.offset += reqLen
 
@@ -44,7 +67,7 @@ func (self *inStream) processHeader() {
 	}
 	self.msgSize = int(size)
 
-	if len(self.buf) < _HDR_SIZE+self.msgSize {
+	if self.offset < _HDR_SIZE+self.msgSize {
 		go self.readBody()
 	} else {
 		self.processBody()
@@ -56,7 +79,6 @@ func (self *inStream) processBody() {
 
 	buf := make([]byte, self.msgSize)
 	copy(buf, self.buf[_HDR_SIZE:_HDR_SIZE+self.msgSize])
-	self.log.Debug("<- msg: ", string(buf))
 	self.msgs <- buf
 
 	pkgSize := _HDR_SIZE + self.msgSize
@@ -66,6 +88,7 @@ func (self *inStream) processBody() {
 		return
 	}
 
+	self.log.Debugf("pkgSize: %d, offset: %d", pkgSize, self.offset)
 	copy(self.buf, self.buf[pkgSize:self.offset])
 	self.offset -= pkgSize
 	if self.offset < _HDR_SIZE {
@@ -84,7 +107,7 @@ func (self *inStream) readBody() {
 		self.conn.Close()
 		return
 	}
-	self.log.Debugf("received %d bytes\n", reqLen)
+	self.log.Debugf("received %d bytes", reqLen)
 
 	self.offset += reqLen
 

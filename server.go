@@ -3,6 +3,8 @@ package server
 import (
 	"net"
 	"sync"
+
+	"alex-shch/logger"
 )
 
 type TcpServer interface {
@@ -16,24 +18,20 @@ type Handlers interface {
 }
 
 type _TcpServer struct {
-	log      Logger
+	log      logger.Logger
 	wg       *sync.WaitGroup
 	listener net.Listener
 	handlers Handlers
 }
 
-func NewServer(addr string, handlers Handlers, log Logger, wg *sync.WaitGroup) (TcpServer, error) {
-	if log == nil {
-		log = nullLogger{}
-	}
-
+func NewServer(addr string, handlers Handlers, log logger.Logger, wg *sync.WaitGroup) (TcpServer, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("Error listening:", err.Error())
 		return nil, err
 	}
 
-	log.Debug("Listening on ", addr)
+	log.Info("Listening on ", addr)
 
 	return &_TcpServer{
 		log:      log,
