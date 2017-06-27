@@ -1,4 +1,4 @@
-package server
+package tcpserver
 
 import (
 	"fmt"
@@ -6,22 +6,6 @@ import (
 
 	"alex-shch/logger"
 )
-
-type OutStream interface {
-	Msgs() chan<- []byte
-}
-
-func NewOutStream(conn net.Conn, log logger.Logger) OutStream {
-	stream := &outStream{
-		log:  log,
-		msgs: make(chan []byte, 8),
-		conn: conn,
-	}
-
-	go stream.waitForMsg()
-
-	return stream
-}
 
 type outStream struct {
 	log     logger.Logger
@@ -31,10 +15,6 @@ type outStream struct {
 	offset  int
 	msgSize int
 	lock    chan struct{}
-}
-
-func (self *outStream) Msgs() chan<- []byte {
-	return self.msgs
 }
 
 func (self *outStream) waitForMsg() {

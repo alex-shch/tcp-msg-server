@@ -2,25 +2,31 @@ package main
 
 import (
 	"fmt"
+	"net"
 	"sync"
 
 	"alex-shch/logger"
 	"alex-shch/tcp-msg-server"
-	"alex-shch/tcp-msg-server/cmd/client"
 )
 
 // implementation server.Handlers
-type Handlers struct {
+type ConnectionCallback struct {
 }
 
-func (Handlers) OnConnect(inMsgs <-chan []byte, outMsgs chan<- []byte) {
+func (ConnectionCallback) OnConnect(id uint64, inMsgs <-chan []byte, outMsgs chan<- []byte, done <-chan struct{}) {
+	fmt.Printf("serv (%d) connect\n", id)
 	go func() {
 		msg := <-inMsgs
-		fmt.Println("serv <-- msg: ", string(msg))
+		fmt.Printf("serv (%d) <-- msg: %s\n", id, string(msg))
 
 		outMsg := string(msg) + " * 2 = " + string(msg) + string(msg)
-		fmt.Println("serv --> msg: ", outMsg)
+		fmt.Printf("serv (%d) --> msg: %s\n", id, outMsg)
 		outMsgs <- []byte(outMsg)
+	}()
+
+	go func() {
+		<-done
+		fmt.Printf("serv (%d) disconnect\n", id)
 	}()
 }
 
@@ -29,7 +35,8 @@ func main() {
 
 	log := logger.NewLogger(logger.INFO)
 
-	server, err := server.NewServer("localhost:4567", Handlers{}, log, wg)
+	serverAddr := "localhost:4567"
+	server, err := tcpserver.NewServer(serverAddr, ConnectionCallback{}, log, wg)
 	if err != nil {
 		panic(err)
 	}
@@ -37,16 +44,21 @@ func main() {
 	go server.Run()
 
 	// client part
-	client, err := client.NewClient("localhost:4567", log)
-	if err != nil {
-		panic(err)
+	for i := 0; i < 1; i++ {
+		conn, err := net.Dial("tcp", serverAddr)
+		if err != nil {
+			panic(err)
+		}
+
+		connHandler := tcpserver.NewConnHandler(conn, log)
+		outMsg := "123abc"
+		fmt.Println("client -> msg: ", outMsg)
+		connHandler.OutMsgs() <- []byte(outMsg)
+		msg := <-connHandler.InMsgs()
+		fmt.Println("cient <- msg: ", string(msg))
+		connHandler.Disconnect()
+		fmt.Println()
 	}
-	outMsg := "123abc"
-	fmt.Println("client -> msg: ", outMsg)
-	client.Out.Msgs() <- []byte(outMsg)
-	msg := <-client.In.Msgs()
-	fmt.Println("cient <- msg: ", string(msg))
-	client.Disconnect()
 
 	//fmt.Scanln()
 

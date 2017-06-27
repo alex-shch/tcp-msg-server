@@ -1,4 +1,4 @@
-package server
+package tcpserver
 
 import (
 	"net"
@@ -7,33 +7,12 @@ import (
 	"alex-shch/logger"
 )
 
-type InStream interface {
-	Msgs() <-chan []byte
-}
-
-func NewInStream(conn net.Conn, log logger.Logger) InStream {
-	stream := &inStream{
-		log:  log,
-		msgs: make(chan []byte, 8),
-		conn: conn,
-		buf:  make([]byte, 64*1024),
-	}
-
-	go stream.waitForMsg()
-
-	return stream
-}
-
 type inStream struct {
 	log    logger.Logger
 	msgs   chan []byte
 	conn   net.Conn
 	buf    []byte
 	offset int
-}
-
-func (self *inStream) Msgs() <-chan []byte {
-	return self.msgs
 }
 
 func (self *inStream) waitForMsg() {

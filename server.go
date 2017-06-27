@@ -1,4 +1,4 @@
-package server
+package tcpserver
 
 import (
 	"net"
@@ -12,19 +12,20 @@ type TcpServer interface {
 	Stop()
 }
 
-type Handlers interface {
-	OnConnect(inMsgs <-chan []byte, outMsgs chan<- []byte)
-	// OnDisconnect()
+type ConnectionCallback interface {
+	OnConnect(connId uint64, inMsgs <-chan []byte, outMsgs chan<- []byte, done <-chan struct{})
 }
 
 type _TcpServer struct {
-	log      logger.Logger
-	wg       *sync.WaitGroup
-	listener net.Listener
-	handlers Handlers
+	idCounter   uint64
+	log         logger.Logger
+	wg          *sync.WaitGroup
+	listener    net.Listener
+	callback    ConnectionCallback
+	connections map[uint64]*_ConnHandler
 }
 
-func NewServer(addr string, handlers Handlers, log logger.Logger, wg *sync.WaitGroup) (TcpServer, error) {
+func NewServer(addr string, callback ConnectionCallback, log logger.Logger, wg *sync.WaitGroup) (TcpServer, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("Error listening:", err.Error())
@@ -34,10 +35,11 @@ func NewServer(addr string, handlers Handlers, log logger.Logger, wg *sync.WaitG
 	log.Info("Listening on ", addr)
 
 	return &_TcpServer{
-		log:      log,
-		wg:       wg,
-		listener: l,
-		handlers: handlers,
+		log:         log,
+		wg:          wg,
+		listener:    l,
+		callback:    callback,
+		connections: make(map[uint64]*_ConnHandler),
 	}, nil
 }
 
@@ -52,12 +54,32 @@ func (self *_TcpServer) Run() {
 			break
 		}
 
-		connHandler := newConnHandler(conn, self.log)
-		connHandler.run()
-		self.handlers.OnConnect(connHandler.in.msgs, connHandler.out.msgs)
+		self.idCounter++
+
+		connHandler := newConnHandler(self.idCounter, conn, self.log)
+		self.connections[self.idCounter] = connHandler
+
+		self.wg.Add(1)
+		go func() {
+			// server waits for close all clients connections
+			defer self.wg.Done()
+			<-connHandler.done
+		}()
+
+		go self.callback.OnConnect(
+			self.idCounter,
+			connHandler.in.msgs,
+			connHandler.out.msgs,
+			connHandler.done,
+		)
 	}
 }
 
 func (self *_TcpServer) Stop() {
 	self.listener.Close()
+
+	// TODO сделать потокобезопасным
+	for _, h := range self.connections {
+		h.Disconnect()
+	}
 }
