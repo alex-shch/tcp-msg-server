@@ -1,6 +1,7 @@
 package tcpserver
 
 import (
+	"io"
 	"net"
 	"strconv"
 
@@ -13,18 +14,16 @@ type inStream struct {
 	conn   net.Conn
 	buf    []byte
 	offset int
+	exit   bool
 }
 
 func (self *inStream) waitForMsg() {
-
-	for { // TODO wait for exit event
-
+	for {
 		// receive header
 		for self.offset < _HDR_SIZE {
 			recvSize, err := self.conn.Read(self.buf[self.offset:])
 			if err != nil {
-				self.log.Error("Error reading: ", err.Error())
-				self.conn.Close()
+				self.handleReadError(err)
 				return
 			}
 			self.offset += recvSize
@@ -42,8 +41,7 @@ func (self *inStream) waitForMsg() {
 		for self.offset < _HDR_SIZE+msgSize {
 			recvSize, err := self.conn.Read(self.buf[self.offset:])
 			if err != nil {
-				self.log.Error("Error reading: ", err.Error())
-				self.conn.Close()
+				self.handleReadError(err)
 				return
 			}
 			self.offset += recvSize
@@ -60,5 +58,16 @@ func (self *inStream) waitForMsg() {
 			copy(self.buf, self.buf[pkgSize:self.offset])
 		}
 		self.offset -= pkgSize
+	}
+}
+
+func (self *inStream) handleReadError(err error) {
+	if err == io.EOF {
+		self.log.Debugf("Remote host %s close connection", self.conn.RemoteAddr())
+	} else if self.exit {
+		self.log.Debugf("Cancel read from %s", self.conn.RemoteAddr())
+	} else {
+		self.log.Error("Error reading: ", err.Error())
+		self.conn.Close()
 	}
 }

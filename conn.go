@@ -13,7 +13,7 @@ const (
 
 type ConnHandler interface {
 	InMsgs() <-chan []byte
-	OutMsgs() chan<- []byte
+	Send(msg []byte) error
 	Disconnect()
 }
 
@@ -56,11 +56,20 @@ func (self *_ConnHandler) InMsgs() <-chan []byte {
 	return self.in.msgs
 }
 
-func (self *_ConnHandler) OutMsgs() chan<- []byte {
-	return self.out.msgs
+func (self *_ConnHandler) Send(msg []byte) (err error) {
+	defer func() {
+		if r := recover(); r != nil {
+			err = r.(error)
+		}
+	}()
+
+	self.out.msgs <- msg
+	return nil
 }
 
 func (self *_ConnHandler) Disconnect() {
+	self.out.exit = true
+	self.in.exit = true
 	self.in.conn.Close()
 	<-self.done
 }
@@ -86,7 +95,6 @@ func (self *_ConnHandler) run() {
 
 	go func() {
 		wg.Wait() // wain in+out routines
-		self.log.Infof("close connection %d", self.id)
 
 		// done event when in+out routines completed
 		close(self.done)

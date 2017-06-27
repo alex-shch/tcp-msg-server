@@ -10,36 +10,41 @@ import (
 type TcpServer interface {
 	Run()
 	Stop()
+	Done() <-chan struct{}
 }
 
 type ConnectionCallback interface {
-	OnConnect(connId uint64, inMsgs <-chan []byte, outMsgs chan<- []byte, done <-chan struct{})
+	//OnConnect(connId uint64, inMsgs <-chan []byte, outMsgs chan<- []byte, done <-chan struct{})
+	OnConnect(connId uint64, inMsgs <-chan []byte, send func([]byte) error, done <-chan struct{})
 }
 
 type _TcpServer struct {
-	idCounter   uint64
-	log         logger.Logger
-	wg          *sync.WaitGroup
-	listener    net.Listener
-	callback    ConnectionCallback
-	connections map[uint64]*_ConnHandler
+	idCounter uint64
+	log       logger.Logger
+	wg        *sync.WaitGroup
+	listener  net.Listener
+	callback  ConnectionCallback
+
+	exit chan struct{} // for server start shutdown
+	done chan struct{} // wnen server has been shutting down
 }
 
-func NewServer(addr string, callback ConnectionCallback, log logger.Logger, wg *sync.WaitGroup) (TcpServer, error) {
+func NewServer(addr string, callback ConnectionCallback, log logger.Logger) (TcpServer, error) {
 	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		log.Error("Error listening:", err.Error())
 		return nil, err
 	}
 
-	log.Info("Listening on ", addr)
+	log.Debug("Listening on ", addr)
 
 	return &_TcpServer{
-		log:         log,
-		wg:          wg,
-		listener:    l,
-		callback:    callback,
-		connections: make(map[uint64]*_ConnHandler),
+		log:      log,
+		wg:       &sync.WaitGroup{},
+		listener: l,
+		callback: callback,
+		exit:     make(chan struct{}),
+		done:     make(chan struct{}),
 	}, nil
 }
 
@@ -50,36 +55,61 @@ func (self *_TcpServer) Run() {
 	for {
 		conn, err := self.listener.Accept()
 		if err != nil {
-			self.log.Error("Error accepting: ", err.Error())
+			if _, closed := <-self.exit; closed {
+				self.log.Error("Error accepting: ", err.Error())
+			} else {
+				self.log.Debug("Cancel accepting")
+			}
 			break
 		}
 
 		self.idCounter++
 
-		connHandler := newConnHandler(self.idCounter, conn, self.log)
-		self.connections[self.idCounter] = connHandler
+		self.log.Debugf("accept connection (%d) from %s", self.idCounter, conn.RemoteAddr())
 
+		connHandler := newConnHandler(self.idCounter, conn, self.log)
+
+		// for close connection when server is down
 		self.wg.Add(1)
 		go func() {
-			// server waits for close all clients connections
 			defer self.wg.Done()
-			<-connHandler.done
+			select {
+			case <-self.exit: // server is shutting down
+				connHandler.Disconnect()
+			case <-connHandler.done: // connection closed
+			}
 		}()
 
-		go self.callback.OnConnect(
-			self.idCounter,
-			connHandler.in.msgs,
-			connHandler.out.msgs,
-			connHandler.done,
-		)
+		// live connection counter
+		self.wg.Add(1)
+		go func() {
+			defer self.wg.Done()
+			<-connHandler.done // connection closed
+			self.log.Debugf("close connection (%d) from %s", self.idCounter, conn.RemoteAddr())
+		}()
+
+		// new connection callback
+		self.wg.Add(1)
+		go func() {
+			defer self.wg.Done()
+			self.callback.OnConnect(
+				self.idCounter,
+				connHandler.in.msgs,
+				//connHandler.out.msgs,
+				connHandler.Send,
+				connHandler.done,
+			)
+		}()
 	}
 }
 
 func (self *_TcpServer) Stop() {
+	close(self.exit)
 	self.listener.Close()
+	self.wg.Wait()
+	close(self.done)
+}
 
-	// TODO сделать потокобезопасным
-	for _, h := range self.connections {
-		h.Disconnect()
-	}
+func (self *_TcpServer) Done() <-chan struct{} {
+	return self.done
 }

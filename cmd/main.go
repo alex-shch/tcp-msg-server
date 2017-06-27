@@ -3,7 +3,6 @@ package main
 import (
 	"fmt"
 	"net"
-	"sync"
 
 	"alex-shch/logger"
 	"alex-shch/tcp-msg-server"
@@ -13,30 +12,31 @@ import (
 type ConnectionCallback struct {
 }
 
-func (ConnectionCallback) OnConnect(id uint64, inMsgs <-chan []byte, outMsgs chan<- []byte, done <-chan struct{}) {
-	fmt.Printf("serv (%d) connect\n", id)
+func (ConnectionCallback) OnConnect(connId uint64, inMsgs <-chan []byte, send func([]byte) error, done <-chan struct{}) {
+
+	fmt.Printf("serv (%d) connect\n", connId)
 	go func() {
 		msg := <-inMsgs
-		fmt.Printf("serv (%d) <-- msg: %s\n", id, string(msg))
+		fmt.Printf("serv (%d) <-- msg: %s\n", connId, string(msg))
 
 		outMsg := string(msg) + " * 2 = " + string(msg) + string(msg)
-		fmt.Printf("serv (%d) --> msg: %s\n", id, outMsg)
-		outMsgs <- []byte(outMsg)
+		fmt.Printf("serv (%d) --> msg: %s\n", connId, outMsg)
+		if err := send([]byte(outMsg)); err != nil {
+			fmt.Println("Send error: ", err)
+		}
 	}()
 
 	go func() {
 		<-done
-		fmt.Printf("serv (%d) disconnect\n", id)
+		fmt.Printf("serv (%d) disconnect\n", connId)
 	}()
 }
 
 func main() {
-	wg := &sync.WaitGroup{}
-
-	log := logger.NewLogger(logger.INFO)
+	log := logger.NewLogger(logger.DEBUG)
 
 	serverAddr := "localhost:4567"
-	server, err := tcpserver.NewServer(serverAddr, ConnectionCallback{}, log, wg)
+	server, err := tcpserver.NewServer(serverAddr, ConnectionCallback{}, log)
 	if err != nil {
 		panic(err)
 	}
@@ -53,7 +53,9 @@ func main() {
 		connHandler := tcpserver.NewConnHandler(conn, log)
 		outMsg := "123abc"
 		fmt.Println("client -> msg: ", outMsg)
-		connHandler.OutMsgs() <- []byte(outMsg)
+		//connHandler.OutMsgs() <- []byte(outMsg)
+		connHandler.Send([]byte(outMsg))
+
 		msg := <-connHandler.InMsgs()
 		fmt.Println("cient <- msg: ", string(msg))
 		connHandler.Disconnect()
@@ -63,5 +65,5 @@ func main() {
 	//fmt.Scanln()
 
 	server.Stop()
-	wg.Wait()
+	<-server.Done()
 }
