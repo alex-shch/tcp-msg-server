@@ -5,7 +5,7 @@ import (
 	"net"
 	"strconv"
 
-	"alex-shch/logger"
+	"github.com/alex-shch/logger"
 )
 
 type inStream struct {

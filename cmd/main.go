@@ -4,8 +4,8 @@ import (
 	"fmt"
 	"net"
 
-	"alex-shch/logger"
-	"alex-shch/tcp-msg-server"
+	"github.com/alex-shch/logger"
+	"github.com/alex-shch/tcp-msg-server"
 )
 
 // implementation server.Handlers

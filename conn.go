@@ -4,7 +4,7 @@ import (
 	"net"
 	"sync"
 
-	"alex-shch/logger"
+	"github.com/alex-shch/logger"
 )
 
 const (

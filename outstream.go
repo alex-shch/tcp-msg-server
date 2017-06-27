@@ -5,7 +5,7 @@ import (
 	"io"
 	"net"
 
-	"alex-shch/logger"
+	"github.com/alex-shch/logger"
 )
 
 type outStream struct {
