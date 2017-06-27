@@ -43,7 +43,6 @@ func main() {
 	}
 	outMsg := "123abc"
 	fmt.Println("client -> msg: ", outMsg)
-	//client.SendMessage([]byte(outMsg))
 	client.Out.Msgs() <- []byte(outMsg)
 	msg := <-client.In.Msgs()
 	fmt.Println("cient <- msg: ", string(msg))

@@ -35,6 +35,6 @@ func newConnHandler(conn net.Conn, log logger.Logger) *_ConnHandler {
 }
 
 func (self *_ConnHandler) run() {
-	go self.in.readHeader()
+	go self.in.waitForMsg()
 	go self.out.waitForMsg()
 }
