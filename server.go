@@ -106,8 +106,10 @@ func (self *_TcpServer) Run() {
 func (self *_TcpServer) Stop() {
 	close(self.exit)
 	self.listener.Close()
-	self.wg.Wait()
-	close(self.done)
+	go func() {
+		self.wg.Wait()
+		close(self.done)
+	}()
 }
 
 func (self *_TcpServer) Done() <-chan struct{} {
